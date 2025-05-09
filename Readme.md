@@ -19,6 +19,6 @@
 - You wll need to have ollama running, or any Openai API spec server
 - Currently using `qwen3:8b`. I have added `/no_think` to the system prompt so that it doesnt spend time on the thinking tokens, you can remove those if you need it to reason more.
 
-
+## Query
+Example query - "are there any folder having mcp in the name in /home/vivek/code?"
 Oh, and type `exit` to stop the conversation.
-
