@@ -3,6 +3,21 @@ import httpx
 import asyncio
 from pathlib import Path
 import os
+import logging
+import click
+from starlette.applications import Starlette
+from starlette.routing import Mount
+from starlette.types import Scope, Receive, Send
+import uvicorn
+import contextlib
+from typing import AsyncIterator
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 mcp = FastMCP("Python360")
 
@@ -141,19 +156,53 @@ def search_items(path: str, search_query: str) -> dict:
         return {"error": f"An unexpected error occurred during search: {str(e)}"}
 
 
+@click.command()
+@click.option("--port", default=8085, help="Port to listen on for HTTP")
+@click.option(
+    "--host", default="127.0.0.1", help="Host to bind server to"
+)
+@click.option(
+    "--log-level",
+    default="INFO",
+    help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+)
+def main(
+    port: int,
+    host: str,
+    log_level: str,
+) -> int:
+    # Configure logging
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
 
+    # ASGI handler for MCP server
+    async def handle_mcp(scope: Scope, receive: Receive, send: Send) -> None:
+        await mcp.handle_asgi(scope, receive, send)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: Starlette) -> AsyncIterator[None]:
+        """Context manager for managing application lifecycle."""
+        logger.info(f"MCP Server starting on {host}:{port}")
+        try:
+            yield
+        finally:
+            logger.info("MCP Server shutting down...")
+
+    # Create an ASGI application using Starlette
+    app = Starlette(
+        debug=True,
+        routes=[
+            Mount("/mcp", app=handle_mcp),
+        ],
+        lifespan=lifespan,
+    )
+
+    # Run the server with uvicorn
+    uvicorn.run(app, host=host, port=port)
+    return 0
 
 
 if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    # Start background async tasks (if needed)
-    loop.run_until_complete(asyncio.sleep(0))  # Ensures an event loop is available
-
-    # Now run FastMCP (blocking)
-    mcp.run()
-
-    """Since mcp.run() is blocking, but we also have async functions (like fetch_weather), 
-        the best solution is to run the  async tasks in a background event loop before calling mcp.run().
-    """
+    main()
